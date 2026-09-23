@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
-import { encodeGeohash, isValidRegionGeohash } from '../shared/geohash';
 import { vectorId, type PatternMetadata } from '../shared/vectors';
 import type { AppEnv } from './env';
+import { parseRegionQuery } from './region-query';
 
 export const DEFAULT_LIMIT = 10;
 export const MAX_LIMIT = 20;
@@ -9,29 +9,14 @@ export const MAX_LIMIT = 20;
 type SimilarQuery = { ok: true; geohash: string; limit: number } | { ok: false; error: string };
 
 export function parseSimilarQuery(query: Record<string, string>): SimilarQuery {
-  let geohash: string;
-  if (query.geohash !== undefined) {
-    geohash = query.geohash.toLowerCase();
-    if (!isValidRegionGeohash(geohash)) {
-      return { ok: false, error: 'geohash must be a 5-character geohash' };
-    }
-  } else if (query.lat !== undefined && query.lon !== undefined) {
-    const lat = Number(query.lat);
-    const lon = Number(query.lon);
-    const blank = query.lat.trim() === '' || query.lon.trim() === '';
-    if (blank || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
-      return { ok: false, error: 'lat must be within -90..90 and lon within -180..180' };
-    }
-    geohash = encodeGeohash(lat, lon);
-  } else {
-    return { ok: false, error: 'provide geohash, or lat and lon' };
-  }
+  const region = parseRegionQuery(query);
+  if (!region.ok) return region;
 
   const limit = query.limit === undefined ? DEFAULT_LIMIT : Number(query.limit);
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) {
     return { ok: false, error: `limit must be an integer from 1 to ${MAX_LIMIT}` };
   }
-  return { ok: true, geohash, limit };
+  return { ok: true, geohash: region.geohash, limit };
 }
 
 const NOT_AGGREGATED = { error: 'no aggregated pattern for this region yet' };
