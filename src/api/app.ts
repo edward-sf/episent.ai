@@ -17,6 +17,8 @@ export function createApp(makeDeps: (env: ApiEnv) => ApiDeps) {
     return c.json({ error: 'internal error' }, 500);
   });
 
+  app.notFound((c) => c.json({ error: 'not found' }, 404));
+
   app.use('*', async (c, next) => {
     if (!c.env.API_TOKEN) {
       console.error('API_TOKEN is not configured');

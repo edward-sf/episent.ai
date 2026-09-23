@@ -118,3 +118,16 @@ describe('POST /ingest', () => {
     expect(errorLog).toHaveBeenCalled();
   });
 });
+
+describe('unknown routes', () => {
+  it('returns a JSON 404 for an authenticated request to an unknown route', async () => {
+    const repo = new FakeRepository();
+    const vectors = new FakeVectorStore();
+    const app = createApp(() => ({ repo, vectors }));
+
+    const res = await app.request('/nope', { headers: { authorization: `Bearer ${TOKEN}` } }, env);
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'not found' });
+  });
+});
