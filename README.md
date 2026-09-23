@@ -15,7 +15,7 @@ Creates an edge API that ingests outbreak data and generates embeddings. It quer
 
 ## Development
 
-Requires Node 20+, Docker (for local Supabase), and a Cloudflare account for Workers AI / Vectorize.
+Requires Node 22.12+, Docker (for local Supabase), and a Cloudflare account for Workers AI / Vectorize.
 
 ```bash
 npm install
@@ -34,5 +34,10 @@ Workers:
 
 - `episent-api` (`wrangler.api.jsonc`): `POST /ingest`, `GET /similar`, bearer-token auth.
 - `episent-aggregator` (`wrangler.cron.jsonc`): hourly 14-day regional aggregation → Workers AI embedding → Vectorize.
+
+The aggregator processes at most 20 regions per hourly run (never-aggregated regions first).
+Pattern history accumulates from live operation only — a region gets at most one vector per
+UTC day on which it received reports. The Supabase API's `max_rows` setting must stay ≥ 1000
+for window-report pagination to work correctly.
 
 Copy `.dev.vars.example` to `.dev.vars` for `npm run dev:api` / `npm run dev:cron`.
