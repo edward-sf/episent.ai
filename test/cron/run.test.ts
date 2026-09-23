@@ -47,7 +47,11 @@ describe('runAggregation', () => {
 
     expect(result).toEqual({ aggregated: ['ezs42'], empty: [], failed: [] });
     expect(repo.windowRequests).toEqual([
-      { geohash: 'ezs42', start: new Date('2026-09-09T12:00:00Z'), end: NOW },
+      {
+        geohash: 'ezs42',
+        start: new Date('2026-09-09T12:00:00Z'),
+        end: new Date('2026-09-23T12:05:00.500Z'),
+      },
     ]);
     expect(embeddedTexts).toHaveLength(1);
     expect(embeddedTexts[0]).toContain('48 total cases');
@@ -61,6 +65,31 @@ describe('runAggregation', () => {
       },
     ]);
     expect(repo.marked).toEqual([{ geohash: 'ezs42', checkedAt: CHECKED_AT, latestWindowEnd: '2026-09-23' }]);
+  });
+
+  it('derives the window end per region from that region\'s checkedAt', async () => {
+    const { repo, deps } = setup();
+    repo.dirty = [
+      { geohash: 'ezs42', checkedAt: '2026-09-23T12:00:00.5+00:00' },
+      { geohash: 'u4pru', checkedAt: '2026-09-23T12:03:00+00:00' },
+    ];
+    repo.windowReports.set('ezs42', EZS42_REPORTS);
+    repo.windowReports.set('u4pru', EZS42_REPORTS);
+
+    await runAggregation(deps, NOW);
+
+    expect(repo.windowRequests).toEqual([
+      {
+        geohash: 'ezs42',
+        start: new Date('2026-09-09T12:00:00Z'),
+        end: new Date('2026-09-23T12:05:00.500Z'),
+      },
+      {
+        geohash: 'u4pru',
+        start: new Date('2026-09-09T12:00:00Z'),
+        end: new Date('2026-09-23T12:08:00.000Z'),
+      },
+    ]);
   });
 
   it('asks for at most MAX_REGIONS_PER_RUN regions', async () => {
@@ -126,6 +155,20 @@ describe('runAggregation', () => {
 
     expect(result.failed).toEqual(['ezs42']);
     expect(repo.marked).toEqual([]);
+  });
+
+  it('lists the region as failed when markAggregated fails, though the vector was already upserted', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { repo, vectors, deps } = setup();
+    repo.dirty = [{ geohash: 'ezs42', checkedAt: CHECKED_AT }];
+    repo.windowReports.set('ezs42', EZS42_REPORTS);
+    repo.failures.add('markAggregated:ezs42');
+
+    const result = await runAggregation(deps, NOW);
+
+    expect(result.failed).toEqual(['ezs42']);
+    expect(await vectors.getByIds(['ezs42:2026-09-23'])).toHaveLength(1);
+    expect(errorLog).toHaveBeenCalled();
   });
 
   it('overwrites the same day vector when rerun', async () => {

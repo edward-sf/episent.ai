@@ -56,4 +56,26 @@ describe('validateCaseReport', () => {
   it.each([null, [], 'text', 42])('rejects a non-object body %j', (body) => {
     expect(validateCaseReport(body).ok).toBe(false);
   });
+
+  it('rejects an event_timestamp more than 5 minutes in the future', () => {
+    const result = validateCaseReport({
+      ...valid,
+      event_timestamp: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual({
+        field: 'event_timestamp',
+        message: 'must not be more than 5 minutes in the future',
+      });
+    }
+  });
+
+  it('accepts an event_timestamp within the clock skew tolerance', () => {
+    const result = validateCaseReport({
+      ...valid,
+      event_timestamp: new Date(Date.now() + 60 * 1000).toISOString(),
+    });
+    expect(result.ok).toBe(true);
+  });
 });

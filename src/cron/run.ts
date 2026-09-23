@@ -1,10 +1,12 @@
+import { MAX_EVENT_CLOCK_SKEW_MS } from '../shared/clock';
 import type { Embedder } from '../shared/embedding';
 import type { Repository } from '../shared/repository';
 import { toIsoDate, vectorId, type PatternMetadata, type VectorStore } from '../shared/vectors';
 import { aggregateWindow, windowStartFor } from './aggregate';
 import { describePattern } from './describe';
 
-// Keeps Supabase fetches per run (1 + 2 per region) under the Workers free-plan subrequest limit.
+// Caps per-run work so Supabase fetches (1 + ≥2 per region, more for paginated regions) plus
+// Workers AI and Vectorize calls stay within Workers subrequest limits.
 export const MAX_REGIONS_PER_RUN = 20;
 
 export interface AggregationDeps {
@@ -27,7 +29,8 @@ export async function runAggregation(deps: AggregationDeps, now: Date): Promise<
 
   for (const { geohash, checkedAt } of dirty) {
     try {
-      const reports = await deps.repo.getWindowReports(geohash, windowStart, now);
+      const windowEndForRegion = new Date(Date.parse(checkedAt) + MAX_EVENT_CLOCK_SKEW_MS);
+      const reports = await deps.repo.getWindowReports(geohash, windowStart, windowEndForRegion);
       if (reports.length === 0) {
         await deps.repo.markAggregated(geohash, checkedAt, null);
         result.empty.push(geohash);
