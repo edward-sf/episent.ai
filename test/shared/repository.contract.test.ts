@@ -5,7 +5,19 @@ import { createSupabaseRepository, type NewCaseReport } from '../../src/shared/r
 const url = process.env.SUPABASE_TEST_URL;
 const key = process.env.SUPABASE_TEST_SECRET_KEY;
 
-describe.skipIf(!url || !key)('Supabase repository (contract)', () => {
+// Safety guard: beforeEach below deletes every row in both tables, so only ever run this
+// suite against a local database.
+function isLocalUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const { hostname } = new URL(value);
+    return hostname === '127.0.0.1' || hostname === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
+describe.skipIf(!url || !key || !isLocalUrl(url))('Supabase repository (contract)', () => {
   // describe.skipIf only skips the `it()` bodies below; this setup code still runs at
   // collection time even when skipped, so fall back to dummy values to avoid throwing
   // when the env vars are unset (the real url/key are used whenever they are set).
