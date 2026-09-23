@@ -20,7 +20,8 @@ function describeCategories({ categories }: RegionAggregate): string {
   if (hidden.length > 0) {
     const hiddenCases = hidden.reduce((sum, c) => sum + c.cases, 0);
     const noun = hidden.length === 1 ? 'category' : 'categories';
-    shown.push(`and ${hidden.length} other ${noun} with ${hiddenCases} cases`);
+    const caseNoun = hiddenCases === 1 ? 'case' : 'cases';
+    shown.push(`and ${hidden.length} other ${noun} with ${hiddenCases} ${caseNoun}`);
   }
   return shown.join(', ');
 }

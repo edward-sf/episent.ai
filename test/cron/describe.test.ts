@@ -54,6 +54,6 @@ describe('describePattern', () => {
 
   it('uses the singular for one extra category', () => {
     const categories = ['a', 'b', 'c', 'd', 'e', 'f'].map((category) => ({ category, cases: 1 }));
-    expect(describePattern(aggregate({ categories }))).toContain('and 1 other category with 1 cases.');
+    expect(describePattern(aggregate({ categories }))).toContain('and 1 other category with 1 case.');
   });
 });
