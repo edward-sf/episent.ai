@@ -1,4 +1,5 @@
 import type {
+  AnomalyStatsRow,
   DirtyRegion,
   NewCaseReport,
   RegionRow,
@@ -48,6 +49,15 @@ export class FakeRepository implements Repository {
   async markAggregated(geohash: string, checkedAt: string, latestWindowEnd: string | null): Promise<void> {
     this.failIfRequested(`markAggregated:${geohash}`);
     this.marked.push({ geohash, checkedAt, latestWindowEnd });
+  }
+
+  anomalyStats: AnomalyStatsRow[] = [];
+  anomalyRequests: Array<{ geohash: string | null; asOf: Date | undefined }> = [];
+
+  async getAnomalyStats(geohash: string | null, asOf?: Date): Promise<AnomalyStatsRow[]> {
+    this.failIfRequested('getAnomalyStats');
+    this.anomalyRequests.push({ geohash, asOf });
+    return geohash === null ? this.anomalyStats : this.anomalyStats.filter((row) => row.geohash === geohash);
   }
 }
 
