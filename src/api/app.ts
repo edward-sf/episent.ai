@@ -4,6 +4,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import type { ApiDeps, ApiEnv, AppEnv } from './env';
 import { ingestHandler } from './ingest';
+import { similarHandler } from './similar';
 
 export const MAX_INGEST_BYTES = 64 * 1024;
 
@@ -42,6 +43,8 @@ export function createApp(makeDeps: (env: ApiEnv) => ApiDeps) {
     }),
     ingestHandler,
   );
+
+  app.get('/similar', similarHandler);
 
   return app;
 }
