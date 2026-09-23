@@ -181,13 +181,12 @@ handling on top. Behaviour of `/similar` is unchanged.
 `Repository` gains:
 
 ```ts
-getAnomalyStats(geohash: string | null): Promise<AnomalyStatsRow[]>
+getAnomalyStats(geohash: string | null, asOf?: Date): Promise<AnomalyStatsRow[]>
 ```
 
 It calls the RPC, paging with `.range()` in chunks of `PAGE_SIZE` (1000),
-following `getWindowReports`. `p_as_of` is not passed from the API (the
-database default applies); contract tests call the RPC directly with a fixed
-`p_as_of`.
+following `getWindowReports`. The API never passes `asOf` (the database
+default `now()` applies); contract tests pass a fixed `asOf`.
 
 ## Testing
 
@@ -203,8 +202,10 @@ database default applies); contract tests call the RPC directly with a fixed
 - **Contract tests (local Supabase, fixed `p_as_of`):** week bucketing at exact
   7-day boundaries; guard week excluded; zero-filled weeks; partial first week
   excluded from `baseline_weeks`; median/MAD equal hand-computed values;
-  categories with no reports in 98 days omitted; `p_geohash` filter; execute
-  revoked from `anon`.
+  categories with no reports in 98 days omitted; `p_geohash` filter; paging
+  past 1000 rows.
+- **Manual check:** after `supabase db reset`, `has_function_privilege('anon',
+  …)` is false for `anomaly_stats` (contract tests only hold the secret key).
 
 ## Out of scope
 
