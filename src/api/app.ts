@@ -21,7 +21,12 @@ export function createApp(makeDeps: (env: ApiEnv) => ApiDeps) {
       console.error('API_TOKEN is not configured');
       return c.json({ error: 'internal error' }, 500);
     }
-    return bearerAuth<AppEnv>({ token: c.env.API_TOKEN })(c, next);
+    return bearerAuth<AppEnv>({
+      token: c.env.API_TOKEN,
+      noAuthenticationHeader: { message: { error: 'unauthorized' } },
+      invalidAuthenticationHeader: { message: { error: 'unauthorized' } },
+      invalidToken: { message: { error: 'unauthorized' } },
+    })(c, next);
   });
 
   app.use('*', async (c, next) => {

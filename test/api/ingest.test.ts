@@ -53,6 +53,7 @@ describe('POST /ingest', () => {
     const { repo, post } = setup();
     const res = await post(valid, {});
     expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
     expect(repo.inserted).toHaveLength(0);
   });
 
@@ -60,6 +61,16 @@ describe('POST /ingest', () => {
     const { repo, post } = setup();
     const res = await post(valid, { authorization: 'Bearer wrong-token' });
     expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
+    expect(repo.inserted).toHaveLength(0);
+  });
+
+  it('rejects a malformed authorization header', async () => {
+    const { repo, post } = setup();
+    const res = await post(valid, { authorization: 'Basic abc' });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
     expect(repo.inserted).toHaveLength(0);
   });
 
