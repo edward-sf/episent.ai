@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/api/app';
 import type { ApiEnv } from '../../src/api/env';
 import { FakeRepository, FakeVectorStore } from '../fakes';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const TOKEN = 'test-token';
 const env = { API_TOKEN: TOKEN } as ApiEnv;
@@ -135,5 +139,17 @@ describe('GET /similar', () => {
   it('requires a bearer token', async () => {
     const { get } = await setup();
     expect((await get('geohash=ezs42', {})).status).toBe(401);
+  });
+
+  it('returns a generic 500 when the vector query fails', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { vectors, get } = await setup();
+    vi.spyOn(vectors, 'query').mockRejectedValue(new Error('vectorize unavailable'));
+
+    const res = await get('geohash=ezs42');
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'internal error' });
+    expect(errorLog).toHaveBeenCalled();
   });
 });
