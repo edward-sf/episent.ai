@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "episent-api",
+  "main": "src/api/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // Secrets (wrangler secret put): API_TOKEN, SUPABASE_URL, SUPABASE_SECRET_KEY
+  "vectorize": [{ "binding": "PATTERNS", "index_name": "episent-patterns", "remote": true }]
+}
