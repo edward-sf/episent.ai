@@ -1,0 +1,3 @@
+API_TOKEN=local-dev-token
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_SECRET_KEY=paste-the-secret-key-from-supabase-status
