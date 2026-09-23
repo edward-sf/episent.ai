@@ -1,7 +1,7 @@
 # episent.ai — Phase 1: Core Edge API Design
 
 **Date:** 2026-09-23
-**Status:** Approved for implementation planning
+**Status:** Approved for implementation planning (revised during planning, see "Revisions")
 
 ## Purpose
 
@@ -12,7 +12,7 @@ vector similarity search.
 
 This phase delivers the **core edge API**: streaming ingest, regional
 pattern aggregation, embedding generation, and similarity query. It does
-**not** include statistical anomaly scoring or a web dashboard — those are
+**not** include statistical anomaly scoring or a web dashboard. Those are
 separate, later phases, each to be specced and built independently.
 
 ## Primary user
@@ -27,162 +27,201 @@ human-in-the-loop alerting or dashboard in this phase.
 - Web dashboard (phase 3)
 - Multi-tenant auth, per-user API keys, or rate limiting beyond a single
   shared bearer token
-- Configurable geohash precision or window length (fixed defaults for now)
+- Configurable geohash precision or window length (fixed constants)
 - Dead-letter tracking for failed aggregations
 
 ## Architecture
 
-Two Cloudflare Worker deployments sharing the same Supabase Postgres
-database and Vectorize index:
+Two Cloudflare Worker deployments sharing one Supabase Postgres database
+and one Vectorize index:
 
-1. **API Worker** (TypeScript + [Hono](https://hono.dev)) — handles HTTP
-   requests.
-2. **Cron Worker** — runs on an hourly
-   [Cron Trigger](https://developers.cloudflare.com/workers/configuration/cron-triggers/),
-   aggregates regional patterns and updates Vectorize.
+1. **API Worker** (`episent-api`, TypeScript + Hono): handles HTTP requests.
+2. **Aggregator Worker** (`episent-aggregator`): runs on an hourly Cron
+   Trigger, aggregates regional patterns and updates Vectorize.
 
 ```
-                POST /ingest                 GET /similar?geohash=...
-                     |                                 |
-                     v                                 v
-              +--------------+                 +--------------+
-              |  API Worker  |                 |  API Worker  |
-              +------+-------+                 +------+-------+
-                     |                                 |
-                     v                                 v
-              +--------------+                 +--------------+
-              |   Supabase   |<----------------+   Vectorize  |
-              |   Postgres   |    metadata     |    Index     |
-              +------+-------+     join        +------+-------+
-                     ^                                 ^
-                     |                                 |
-                     |     aggregate 14d window         |
-                     |     -> text description          |
-                     |     -> Workers AI embed           |
-                     |     -> upsert vector              |
-                     +---------------+-------------------+
-                                     |
-                              +--------------+
-                              |  Cron Worker |
-                              | (hourly)     |
-                              +--------------+
+   POST /ingest ──► API Worker ──► Supabase (case_reports; trigger registers region)
+   GET /similar ──► API Worker ──► Supabase (regions_index: latest window)
+                                └► Vectorize (getByIds → query, exclude own geohash)
+
+   hourly cron ──► Aggregator Worker
+                     1. dirty_regions() RPC          (Supabase)
+                     2. 14-day window reports        (Supabase)
+                     3. aggregate → text description
+                     4. embed                        (Workers AI)
+                     5. upsert <geohash>:<date>      (Vectorize)
+                     6. mark aggregated              (Supabase)
 ```
 
-### Why two Worker deployments
+The API Worker is request-driven and latency-sensitive; the aggregator runs
+a batch job on a schedule. Keeping them separate keeps the request path
+simple and lets the batch job be deployed and reasoned about independently.
 
-The API Worker is request-driven and latency-sensitive; the Cron Worker
-runs a batch aggregation job on a schedule. Separating them keeps the
-ingest/query path simple and lets the aggregation job be reasoned about,
-deployed, and scaled independently.
+## Regions and pattern history
+
+- A **region** is a geohash cell at precision 5 (5 characters, about
+  4.9 km × 4.9 km), computed server-side from `lat`/`lon` on ingest.
+- A **pattern vector** describes one region's 14-day window ending on a
+  given UTC date. Vector id: `<geohash>:<YYYY-MM-DD>` (for example
+  `9q8yy:2026-09-23`).
+- Hourly runs on the same UTC day overwrite that day's vector. A new day
+  produces a new vector, so earlier days stay in the index as history.
+  This is what makes "find similar past outbreaks" possible.
+- A region is only re-aggregated when it receives new reports. If a region
+  gets no new reports, it gets no new daily vector, so its history reflects
+  the days on which its data changed.
 
 ## Data model (Supabase Postgres)
 
 ```sql
 create table case_reports (
-  id              uuid primary key default gen_random_uuid(),
-  received_at     timestamptz not null default now(),
-  event_timestamp timestamptz not null,
-  lat             double precision not null,
-  lon             double precision not null,
-  geohash         text not null,         -- precision 5, derived from lat/lon
-  disease_category text not null,
-  case_count      integer not null check (case_count > 0),
-  age_band        text,
-  symptom_codes   text[],
-  raw_payload     jsonb not null         -- original request body, for audit/reprocessing
+  id               uuid primary key default gen_random_uuid(),
+  received_at      timestamptz not null default now(),
+  event_timestamp  timestamptz not null,
+  lat              double precision not null,
+  lon              double precision not null,
+  geohash          text not null,         -- precision 5, derived from lat/lon
+  disease_category text not null,         -- normalized to lowercase
+  case_count       integer not null check (case_count > 0),
+  age_band         text,
+  symptom_codes    text[],
+  raw_payload      jsonb not null         -- original request body, for audit/reprocessing
 );
-
-create index on case_reports (geohash, event_timestamp);
 
 create table regions_index (
   geohash            text primary key,
-  last_aggregated_at timestamptz         -- null until first aggregation run
+  last_aggregated_at timestamptz,         -- null until first aggregation
+  latest_window_end  date                 -- date of this region's newest vector
 );
 ```
 
-`geohash` is computed server-side from `lat`/`lon` at precision 5
-(~4.9km × 4.9km cells) on ingest.
+- An `after insert` trigger on `case_reports` inserts the region into
+  `regions_index` (on conflict do nothing). A report is never orphaned from
+  aggregation, even if something fails partway through.
+- `dirty_regions(max_regions)` RPC returns regions that have never been
+  aggregated, or that have reports received after `last_aggregated_at`.
+  Never-aggregated regions come first, then the oldest. Each row also
+  returns the database's `now()` as `checked_at`.
+- RLS is enabled on both tables with no policies. Workers connect with the
+  Supabase secret (service-role) key. The RPC is revoked from
+  `anon`/`authenticated`.
 
 ## API Worker
 
+All routes require `Authorization: Bearer <API_TOKEN>` (a Worker secret).
+Missing or wrong token → 401. An unset `API_TOKEN` → 500 (fail closed).
+Unhandled errors → 500 `{ "error": "internal error" }`.
+
 ### `POST /ingest`
 
-- Auth: `Authorization: Bearer <shared token>`, checked against a Worker
-  secret. 401 if missing/invalid.
-- Body: JSON case record — `event_timestamp`, `lat`, `lon`,
-  `disease_category`, `case_count`, optional `age_band`, optional
-  `symptom_codes`.
-- Validates required fields and types; 400 with field-level error details
-  on failure.
-- Computes `geohash` from `lat`/`lon`.
-- Inserts a row into `case_reports` (including `raw_payload` = the
-  original body).
-- Upserts `regions_index` row for the geohash if absent (`last_aggregated_at
-  = null`), so the cron job knows to pick it up.
-- Returns 201 with the inserted record's `id`.
+- Body (JSON, max 64 KB): `event_timestamp` (ISO 8601 with offset), `lat`
+  (−90..90), `lon` (−180..180), `disease_category` (non-empty, ≤100 chars,
+  lowercased), `case_count` (positive integer), optional `age_band`,
+  optional `symptom_codes` (string array).
+- Invalid JSON → 400. Validation failure → 400 with
+  `details: [{ field, message }]`. Nothing is written in either case.
+- Computes `geohash` and inserts into `case_reports` with
+  `raw_payload` = original body.
+- Returns 201 `{ id, geohash }`.
 
 ### `GET /similar`
 
-- Auth: same bearer token.
-- Query params: `geohash` (required — the region to find matches for) or
-  `lat`/`lon` (converted to geohash server-side), `limit` (default 10).
-- Looks up the most recent Vectorize vector for the given geohash (its
-  current aggregated pattern) as the query vector. 404 if no aggregated
-  vector exists yet for that region.
-- Queries Vectorize for nearest neighbors (excluding the query region
-  itself), returns geohash, similarity score, and window end date per
-  match.
-- Joins back to `case_reports`/aggregation metadata to include a summary
-  (top disease categories, total cases) for each matched region.
+- Query: `geohash` (5-char geohash), **or** `lat` + `lon`; optional `limit`
+  (integer 1–20, default 10; 20 is Vectorize's `topK` cap when metadata is
+  returned).
+- Reads `regions_index.latest_window_end` for the region, then fetches
+  vector `<geohash>:<latest_window_end>` with `getByIds`. 404 if the region
+  is unknown, has never been aggregated, or its vector is not visible yet
+  (Vectorize upserts are eventually consistent).
+- Queries Vectorize with that vector, filtering out **all** vectors of the
+  query region (`geohash $ne`). Overlapping windows from the same region are
+  trivially similar. This filter requires a Vectorize metadata index on
+  `geohash`.
+- Response:
+  ```json
+  {
+    "query": { "geohash": "9q8yy", "window_end": "2026-09-23" },
+    "matches": [
+      { "id": "dr5ru:2026-08-02", "score": 0.93, "geohash": "dr5ru",
+        "window_end": "2026-08-02", "total_cases": 61, "top_category": "respiratory" }
+    ]
+  }
+  ```
+  Match details come from Vectorize metadata. No Supabase join is needed.
 
-## Cron Worker
+## Aggregator Worker
 
-Runs hourly via Cron Trigger:
+Hourly Cron Trigger (`0 * * * *`):
 
-1. Query `regions_index` for geohashes where `last_aggregated_at is null
-   or` there exist `case_reports` with `received_at > last_aggregated_at`.
-2. For each dirty geohash:
-   a. Pull all `case_reports` rows in the 14-day window ending now.
-   b. Aggregate: total case count, count per `disease_category`, age-band
-      distribution, simple trend (this-week vs. prior-week case count).
-   c. Render a text description, e.g.:
-      > "Region 9q8yyk, 14-day window ending 2026-09-23: 42 respiratory
-      > cases, 12 gastrointestinal cases, median age band 25-34, case
-      > count trending +18% vs. prior window."
-   d. Call Workers AI (`@cf/baai/bge-base-en-v1.5`) to embed the
-      description.
-   e. Upsert the resulting vector into Vectorize, id = `<geohash>`,
-      metadata = `{ geohash, window_end, total_cases, top_category }`.
-   f. On success, update `regions_index.last_aggregated_at = now()`.
-   g. On failure (Workers AI error, etc.), log and leave
-      `last_aggregated_at` unchanged so the region is retried next run.
+1. `dirty_regions(20)`: at most 20 regions per run to stay within Workers
+   subrequest limits. Any remaining regions are picked up on later runs.
+2. For each dirty region, independently:
+   a. Fetch its reports with `event_timestamp` in `(now − 14d, now]`.
+      Page through results in chunks of 1000 because of PostgREST's row cap.
+   b. No reports in window → mark aggregated (keep `latest_window_end`),
+      no vector.
+   c. Aggregate: total cases, cases per category, most common age band
+      (weighted by case count), cases in the most recent 7 days vs. the
+      prior 7 days.
+   d. Render a **pattern-only** description. It leaves out the geohash and
+      the date, because those tokens would bias similarity toward region
+      identity or recency instead of the outbreak pattern. Example:
+      > "14-day case pattern: 48 total cases. By category: respiratory 36,
+      > gastrointestinal 12. Most common age band: 25-34. Trend: +18% in the
+      > most recent 7 days versus the prior 7 days."
+   e. Embed with Workers AI `@cf/baai/bge-base-en-v1.5` (768 dims).
+   f. Upsert `<geohash>:<today UTC>` with metadata
+      `{ geohash, window_end, total_cases, top_category }`.
+   g. Mark aggregated: `last_aggregated_at = checked_at` (the DB time from
+      step 1, so reports arriving mid-run still count as new next time),
+      `latest_window_end = today`.
+3. Any failure in steps a–g for a region is logged with `console.error`.
+   That region is not marked, so the next run retries it. Upserts use
+   deterministic ids, so a retry is idempotent.
 
-## Error handling
+## Error handling summary
 
-- Ingest validation errors: 400, field-level messages, nothing written.
-- Ingest auth errors: 401.
-- Similarity query for a region with no aggregated vector yet: 404.
-- Cron aggregation failures (embedding call, Vectorize upsert): logged via
-  `console.error` (visible in Workers Observability), region stays dirty
-  and is retried automatically on the next hourly run. No dead-letter
-  table in phase 1 — bounded staleness (at most ~1-2 hours before an
-  Workers AI outage resolves) is an acceptable trade-off for a research
-  tool.
+| Situation | Behaviour |
+|---|---|
+| Bad/missing token | 401 |
+| Invalid JSON / validation failure | 400, nothing written |
+| Body > 64 KB | 413 |
+| Region unknown / not aggregated / vector not yet visible | 404 |
+| Supabase or Vectorize error in API | 500 `internal error`, logged |
+| Aggregation failure for one region | logged, region retried next run, other regions unaffected |
 
 ## Testing
 
-- **Unit tests (Vitest):** geohash computation from lat/lon, case record
-  validation, window aggregation logic, text description rendering.
-- **Integration tests:** local Wrangler dev (Miniflare) exercising
-  `/ingest` and `/similar` end-to-end against a test Supabase project (or
-  a mocked Supabase client if a test project isn't available), and the
-  cron `scheduled()` handler invoked directly against seeded test data.
-- No live Cloudflare deploy required to validate phase 1.
+Vectorize and Workers AI have no local simulation, so:
+
+- **Unit tests (Vitest):** geohash encoding, request validation, window
+  aggregation, description rendering, embedder adapter.
+- **In-process integration tests:** the Hono app (`app.request`) and the
+  aggregation orchestrator run end-to-end against in-memory fakes of the
+  repository and Vectorize.
+- **Repository contract tests:** exercise the real SQL (trigger, RPC,
+  pagination) against local Supabase (`supabase start`). Skipped when the
+  test DB env vars are absent.
+- **Manual smoke test:** deploy both Workers against real Supabase +
+  Vectorize, ingest sample records, trigger aggregation, query `/similar`.
+
+## Revisions
+
+Revised 2026-09-23 during implementation planning:
+- Vector id changed from `<geohash>` (overwrote history) to
+  `<geohash>:<date>`. Added `regions_index.latest_window_end`.
+- Embedded text no longer includes the geohash/date.
+- `last_aggregated_at` is set from the DB time captured before reading, not
+  `now()` after processing.
+- Region registration moved to a DB trigger. Added the per-run cap (20),
+  pagination, RLS, `limit` max 20, and the metadata index requirement.
+- `/similar` returns Vectorize metadata instead of joining Supabase.
+- "Median age band" became "most common age band" (bands are labels, not
+  numbers).
+- Testing section reflects that Vectorize/Workers AI can't run locally.
 
 ## Open questions for later phases
 
-- Phase 2 (statistical anomaly scoring): what's the baseline — historical
-  average for that geohash/season, or a broader regional/global baseline
-  for sparse regions?
-- Phase 3 (dashboard): map view vs. table view as the primary layout;
-  real-time vs. periodic refresh.
+- Phase 2 (statistical anomaly scoring): baseline per geohash/season, or a
+  broader regional baseline for sparse regions?
+- Phase 3 (dashboard): map vs. table as primary layout; refresh model.
