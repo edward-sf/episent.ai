@@ -27,6 +27,7 @@ alter table public.regions_index enable row level security;
 
 create function public.register_region() returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   insert into public.regions_index (geohash) values (new.geohash)
@@ -43,6 +44,7 @@ create function public.dirty_regions(max_regions integer)
 returns table (geohash text, checked_at timestamptz)
 language sql
 stable
+set search_path = ''
 as $$
   select r.geohash, now() as checked_at
   from public.regions_index r
