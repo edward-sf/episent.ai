@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>episent.ai · Outbreak dashboard</title>
+    <link rel="icon" href="data:," />
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="brand">
+        <h1>episent.ai</h1>
+        <span class="badge-synthetic">Synthetic data</span>
+      </div>
+      <div class="header-actions">
+        <span id="as-of" class="as-of"></span>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <div id="banner" class="banner" role="alert" hidden>
+      <span>Couldn't load data.</span>
+      <button id="banner-retry" type="button">Retry</button>
+    </div>
+
+    <main class="layout">
+      <section class="map-panel" aria-label="Map of regions">
+        <div id="map"></div>
+        <ul id="legend" class="legend" aria-label="Legend"></ul>
+      </section>
+      <section class="list-panel" aria-labelledby="list-heading">
+        <h2 id="list-heading">Regions</h2>
+        <ol id="region-list" class="region-list"></ol>
+      </section>
+      <section id="detail" class="detail-panel" aria-live="polite"></section>
+    </main>
+  </body>
+</html>

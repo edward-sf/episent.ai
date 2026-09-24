@@ -40,3 +40,9 @@ jobs:
 
       - name: Bundle aggregator Worker
         run: npx wrangler deploy --dry-run -c wrangler.cron.jsonc --outdir dist/cron
+
+      - name: Build dashboard
+        run: npm run build:dashboard
+
+      - name: Bundle dashboard Worker
+        run: npx wrangler deploy --dry-run -c wrangler.dashboard.jsonc --outdir dist/dashboard-worker

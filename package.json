@@ -11,7 +11,10 @@
     "dev:api": "wrangler dev -c wrangler.api.jsonc",
     "dev:cron": "wrangler dev -c wrangler.cron.jsonc --test-scheduled",
     "deploy:api": "wrangler deploy -c wrangler.api.jsonc",
-    "deploy:cron": "wrangler deploy -c wrangler.cron.jsonc"
+    "deploy:cron": "wrangler deploy -c wrangler.cron.jsonc",
+    "build:dashboard": "vite build",
+    "dev:dashboard": "vite build && wrangler dev -c wrangler.dashboard.jsonc -c wrangler.api.jsonc",
+    "deploy:dashboard": "vite build && wrangler deploy -c wrangler.dashboard.jsonc"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.1",
