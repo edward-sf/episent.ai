@@ -85,4 +85,4 @@ npm run deploy:dashboard   # build + deploy (set the API_TOKEN secret first: sam
   dashboard Worker, and `/ingest` isn't reachable through it.
 - Region names come from `src/shared/region-labels.ts` (the demo cities). Other regions show their geohash.
 - Data is loaded when the page opens and on **Refresh**. There's no polling.
-- Map tiles: © OpenStreetMap contributors, © CARTO.
+- Map tiles: © OpenStreetMap contributors.

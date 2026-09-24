@@ -3,11 +3,10 @@ import { el, statusBadge } from './dom';
 import type { DashboardState } from './store';
 import { STATUS_COLORS, STATUS_LABELS, STATUS_ORDER, toMarkerSpecs } from './view-model';
 
-// Keyless CARTO basemap; the CSP img-src must allow https://*.basemaps.cartocdn.com.
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-const ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors ' +
-  '&copy; <a href="https://carto.com/attributions">CARTO</a>';
+// Keyless OSM tiles; the CSP img-src must allow https://tile.openstreetmap.org. Light use only
+// (per the OSM tile usage policy).
+const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 export interface DashboardMap {
   render(state: DashboardState): void;
@@ -15,7 +14,7 @@ export interface DashboardMap {
 
 export function createMap(container: HTMLElement, legend: HTMLElement, onSelect: (geohash: string) => void): DashboardMap {
   const map = L.map(container).setView([52, 10], 4);
-  L.tileLayer(TILE_URL, { attribution: ATTRIBUTION, subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+  L.tileLayer(TILE_URL, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map);
   const markers = L.layerGroup().addTo(map);
 
   legend.replaceChildren(

@@ -161,7 +161,7 @@ button {
 
 .region-row {
   display: grid;
-  grid-template-columns: 1fr auto 3.5rem;
+  grid-template-columns: minmax(0, 1fr) auto 3.5rem;
   gap: 8px;
   align-items: center;
   width: 100%;
@@ -234,6 +234,10 @@ button:focus-visible {
   font-size: 1rem;
 }
 
+.table-wrap {
+  overflow-x: auto;
+}
+
 .categories {
   width: 100%;
   margin-top: 12px;
@@ -243,7 +247,7 @@ button:focus-visible {
 
 .categories th,
 .categories td {
-  padding: 6px 8px;
+  padding: 6px;
   border-bottom: 1px solid var(--border);
   text-align: left;
 }
@@ -255,6 +259,10 @@ button:focus-visible {
 
 .categories td.num {
   text-align: right;
+}
+
+.categories .status {
+  white-space: normal;
 }
 
 .similar-list {

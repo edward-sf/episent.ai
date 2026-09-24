@@ -47,7 +47,9 @@ function categoriesTable(geohash: string, rows: CategoryRow[]): HTMLElement {
     body.append(tr);
   }
   table.append(head, body);
-  return table;
+  const wrap = el('div', 'table-wrap');
+  wrap.append(table);
+  return wrap;
 }
 
 function similarSection(similar: SimilarState | undefined, onRetry: () => void): HTMLElement {
