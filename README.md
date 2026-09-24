@@ -86,3 +86,5 @@ npm run deploy:dashboard   # build + deploy (set the API_TOKEN secret first: sam
 - Region names come from `src/shared/region-labels.ts` (the demo cities). Other regions show their geohash.
 - Data is loaded when the page opens and on **Refresh**. There's no polling.
 - Map tiles: © OpenStreetMap contributors.
+- Deploy: `npx wrangler secret put API_TOKEN -c wrangler.dashboard.jsonc` (same value as episent-api's), then `npm run deploy:dashboard`. Deploy `episent-api` first.
+- Teardown: `npx wrangler delete -c wrangler.dashboard.jsonc`, before or together with `episent-api`.

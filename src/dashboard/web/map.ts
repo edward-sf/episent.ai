@@ -40,7 +40,7 @@ export function createMap(container: HTMLElement, legend: HTMLElement, onSelect:
           fillColor: spec.color,
           fillOpacity: 0.9,
         })
-          .bindTooltip(`${spec.name}: ${spec.statusLabel}`)
+          .bindTooltip(el('span', undefined, `${spec.name}: ${spec.statusLabel}`))
           .on('click', () => onSelect(spec.geohash))
           .addTo(markers);
       }

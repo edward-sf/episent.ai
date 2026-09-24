@@ -81,6 +81,11 @@ export function createStore(api: DashboardApi): Store {
         return;
       }
 
+      if (!Array.isArray(result.data?.regions) || typeof result.data?.as_of !== 'string') {
+        setState({ loading: false, error: 'invalid response' });
+        return;
+      }
+
       const { regions, as_of } = result.data;
       const keep = state.selected !== null && regions.some((r) => r.geohash === state.selected);
       const selected = keep ? state.selected : (regions[0]?.geohash ?? null);

@@ -102,6 +102,16 @@ describe('createStore', () => {
     expect(api.similar).not.toHaveBeenCalled();
   });
 
+  it('records an error when the response body is malformed', async () => {
+    const api = fakeApi([{ ok: true, data: {} as AnomaliesResponse }]);
+    const store = createStore(api);
+
+    await store.refresh();
+
+    expect(store.getState()).toMatchObject({ loading: false, error: 'invalid response', anomalies: [] });
+    expect(api.similar).not.toHaveBeenCalled();
+  });
+
   it('records an error on a failed first load and leaves the list empty', async () => {
     const store = createStore(fakeApi([{ ok: false, status: 500, error: 'internal error' }]));
 
