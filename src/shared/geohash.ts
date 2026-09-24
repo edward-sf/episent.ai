@@ -47,3 +47,31 @@ export function encodeGeohash(lat: number, lon: number, precision = REGION_PRECI
 export function isValidRegionGeohash(value: string): boolean {
   return REGION_GEOHASH.test(value);
 }
+
+// Centre of the geohash cell.
+export function decodeGeohash(hash: string): { lat: number; lon: number } {
+  let latMin = -90;
+  let latMax = 90;
+  let lonMin = -180;
+  let lonMax = 180;
+  let isLonBit = true;
+
+  for (const char of hash) {
+    const value = BASE32.indexOf(char);
+    if (value < 0) throw new Error(`invalid geohash character: ${char}`);
+    for (let bit = 4; bit >= 0; bit -= 1) {
+      const on = ((value >> bit) & 1) === 1;
+      if (isLonBit) {
+        const mid = (lonMin + lonMax) / 2;
+        if (on) lonMin = mid;
+        else lonMax = mid;
+      } else {
+        const mid = (latMin + latMax) / 2;
+        if (on) latMin = mid;
+        else latMax = mid;
+      }
+      isLonBit = !isLonBit;
+    }
+  }
+  return { lat: (latMin + latMax) / 2, lon: (lonMin + lonMax) / 2 };
+}
