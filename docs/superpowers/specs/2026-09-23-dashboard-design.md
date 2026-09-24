@@ -102,8 +102,12 @@ New:
 
 Changed:
 
-- `src/api/similar.ts`: export a `SimilarResponse` type describing the
-  existing response body. No behaviour change.
+- `src/shared/api-types.ts` (new): the API response types
+  (`AnomalyStatus`, `CategoryAnomaly`, `RegionAnomaly`, `AnomaliesResponse`,
+  `SimilarMatch`, `SimilarResponse`) as a pure types-only module.
+  `src/shared/anomaly.ts` re-exports its three types from there, and
+  `src/api/anomalies.ts` and `src/api/similar.ts` type their bodies with it. No
+  behaviour change. This keeps the browser type-check free of server modules.
 - `src/shared/geohash.ts`: add `decodeGeohash(hash): { lat, lon }` (cell
   centroid).
 - `package.json`: scripts `dev:dashboard`, `build:dashboard`,
@@ -111,9 +115,9 @@ Changed:
 - `.github/workflows/ci.yml`: build the dashboard and dry-run bundle its Worker.
 - `README.md`: dashboard section.
 
-The frontend imports `RegionAnomaly`, `CategoryAnomaly`, `AnomalyStatus` and
-`SimilarResponse` with type-only imports, so the API contract is checked at
-compile time and no server code is bundled into the browser.
+The frontend imports these types from `src/shared/api-types.ts` with type-only
+imports, so the API contract is checked at compile time and no server code is
+bundled into the browser.
 
 ## Proxy Worker
 
