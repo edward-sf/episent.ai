@@ -50,8 +50,9 @@ export function scoreCategory(row: AnomalyStatsRow): CategoryAnomaly {
   if (row.baseline_weeks < BASELINE_MIN_WEEKS) {
     return { ...stats, status: 'insufficient_data', score: null };
   }
-  const score = robustScore(row.current_cases, row.baseline_median ?? 0, row.baseline_mad ?? 0);
-  return { ...stats, status: statusFor(score, row.current_cases), score: Math.round(score * 100) / 100 };
+  const rawScore = robustScore(row.current_cases, row.baseline_median ?? 0, row.baseline_mad ?? 0);
+  const score = Math.round(rawScore * 100) / 100;
+  return { ...stats, status: statusFor(score, row.current_cases), score };
 }
 
 function statusFor(score: number, currentCases: number): AnomalyStatus {

@@ -105,8 +105,9 @@ Pure functions, no I/O.
 
 - **Score:** `(current − median) / max(1.4826 · MAD, √median, 1)`.
   The `√median` term is a Poisson-like noise floor; the `1` floor stops sparse
-  categories (median 0, MAD 0) producing huge scores. Rounded to 2 decimals in
-  the response.
+  categories (median 0, MAD 0) producing huge scores. Rounded to 2 decimals;
+  the status is decided from the rounded score, so the displayed score and
+  status always agree.
 - **Category status**, first match wins:
   1. `baseline_weeks < 4` → `insufficient_data`, score `null`.
   2. `score ≥ 3` and `current_cases ≥ 5` → `anomalous`.

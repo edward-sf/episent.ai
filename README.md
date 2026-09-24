@@ -62,4 +62,7 @@ curl -H "Authorization: Bearer $API_TOKEN" "$API_URL/anomalies"                 
 curl -H "Authorization: Bearer $API_TOKEN" "$API_URL/anomalies?geohash=ezs42"   # one region (or lat=&lon=)
 ```
 
-No seasonal adjustment: the baseline covers the last ~3 months only.
+Limitations:
+- No seasonal adjustment: only reports from the last 98 days are considered (current week + guard week + 12-week baseline).
+- A single report can flag a region: a new category (median 0) with 5+ cases in a region with ≥4 weeks of history scores as anomalous; categories are free text.
+- The list omits known regions with no reports in the last 98 days; query them by `geohash` to get `insufficient_data`.

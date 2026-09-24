@@ -81,6 +81,13 @@ describe('scoreCategory', () => {
   it('rounds the score to 2 decimals', () => {
     expect(scoreCategory(row({ current_cases: 10, baseline_median: 4, baseline_mad: 2 })).score).toBe(2.02);
   });
+
+  it('decides status from the rounded score so displayed score and status agree', () => {
+    // raw = 9 / (1.4826 * 2.026) ≈ 2.9963, rounds to 3 → should be anomalous, not elevated
+    const result = scoreCategory(row({ current_cases: 10, baseline_median: 1, baseline_mad: 2.026 }));
+    expect(result.score).toBe(3);
+    expect(result.status).toBe('anomalous');
+  });
 });
 
 describe('regionAnomaly', () => {
