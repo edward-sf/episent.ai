@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { bearerAuth } from 'hono/bearer-auth';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
+import { anomaliesHandler } from './anomalies';
 import type { ApiDeps, ApiEnv, AppEnv } from './env';
 import { ingestHandler } from './ingest';
 import { similarHandler } from './similar';
@@ -47,6 +48,7 @@ export function createApp(makeDeps: (env: ApiEnv) => ApiDeps) {
   );
 
   app.get('/similar', similarHandler);
+  app.get('/anomalies', anomaliesHandler);
 
   return app;
 }

@@ -144,4 +144,136 @@ describe.skipIf(!url || !key || !isLocalUrl(url))('Supabase repository (contract
     expect((await repo.listDirtyRegions(2)).map((r) => r.geohash)).toEqual(['s0000', 'u4pru']);
     expect((await repo.listDirtyRegions(20)).map((r) => r.geohash)).toEqual(['s0000', 'u4pru', 'ezs42']);
   });
+
+  describe('anomaly_stats', () => {
+    const T = new Date('2026-09-23T12:00:00Z');
+    const HOUR = 60 * 60 * 1000;
+    const DAY = 24 * HOUR;
+    const WEEK = 7 * DAY;
+    const before = (ms: number) => new Date(T.getTime() - ms).toISOString();
+
+    async function seed(rows: Array<{ at: string; cases: number; geohash?: string; category?: string }>) {
+      const { error } = await admin.from('case_reports').insert(
+        rows.map((r) => ({
+          event_timestamp: r.at,
+          lat: 42.605,
+          lon: -5.603,
+          geohash: r.geohash ?? 'ezs42',
+          disease_category: r.category ?? 'respiratory',
+          case_count: r.cases,
+          raw_payload: {},
+        })),
+      );
+      expect(error).toBeNull();
+    }
+
+    const stats = (rows: Array<{ as_of: string }>) => rows.map(({ as_of: _asOf, ...rest }) => rest);
+
+    it('buckets by 7-day week, ignores the guard week, and computes median and MAD', async () => {
+      await seed([
+        // Anchors the region's first report long ago so all 12 baseline weeks qualify.
+        { at: before(200 * DAY), cases: 1, category: 'other' },
+        { at: before(0), cases: 2 }, // exactly t: week 0
+        { at: before(WEEK - 1000), cases: 3 }, // just inside week 0
+        { at: before(WEEK), cases: 100 }, // exactly t − 7d: week 1 (guard), ignored
+        // Baseline weeks 2..13 hold 1..12 cases → median 6.5, MAD 3.
+        ...Array.from({ length: 12 }, (_, i) => ({ at: before((i + 2) * WEEK + HOUR), cases: i + 1 })),
+      ]);
+
+      const rows = await repo.getAnomalyStats('ezs42', T);
+
+      expect(stats(rows)).toEqual([
+        {
+          geohash: 'ezs42',
+          disease_category: 'respiratory',
+          current_cases: 5,
+          baseline_median: 6.5,
+          baseline_mad: 3,
+          baseline_weeks: 12,
+        },
+      ]);
+      expect(Date.parse(rows[0]!.as_of)).toBe(T.getTime());
+    });
+
+    it('zero-fills baseline weeks and omits categories with no reports in 98 days', async () => {
+      await seed([
+        { at: before(200 * DAY), cases: 4, category: 'other' },
+        { at: before(5 * WEEK + HOUR), cases: 12 },
+      ]);
+
+      expect(stats(await repo.getAnomalyStats('ezs42', T))).toEqual([
+        {
+          geohash: 'ezs42',
+          disease_category: 'respiratory',
+          current_cases: 0,
+          baseline_median: 0,
+          baseline_mad: 0,
+          baseline_weeks: 12,
+        },
+      ]);
+    });
+
+    it("counts only whole baseline weeks after the region's first report", async () => {
+      await seed([
+        // First report lands inside week 5, so only weeks 2, 3 and 4 qualify.
+        { at: before(5 * WEEK + HOUR), cases: 1 },
+        { at: before(HOUR), cases: 2 },
+      ]);
+
+      expect(stats(await repo.getAnomalyStats('ezs42', T))).toEqual([
+        {
+          geohash: 'ezs42',
+          disease_category: 'respiratory',
+          current_cases: 2,
+          baseline_median: 0,
+          baseline_mad: 0,
+          baseline_weeks: 3,
+        },
+      ]);
+    });
+
+    it('returns null baseline statistics when no week qualifies', async () => {
+      await seed([{ at: before(HOUR), cases: 1 }]);
+
+      expect(stats(await repo.getAnomalyStats('ezs42', T))).toEqual([
+        {
+          geohash: 'ezs42',
+          disease_category: 'respiratory',
+          current_cases: 1,
+          baseline_median: null,
+          baseline_mad: null,
+          baseline_weeks: 0,
+        },
+      ]);
+    });
+
+    it('filters by geohash, or returns every region ordered by geohash and category', async () => {
+      await seed([
+        { at: before(HOUR), cases: 1, geohash: 'u4pru', category: 'respiratory' },
+        { at: before(HOUR), cases: 1, geohash: 'ezs42', category: 'respiratory' },
+        { at: before(HOUR), cases: 1, geohash: 'ezs42', category: 'gastrointestinal' },
+      ]);
+
+      expect((await repo.getAnomalyStats('u4pru', T)).map((r) => r.geohash)).toEqual(['u4pru']);
+      expect((await repo.getAnomalyStats(null, T)).map((r) => `${r.geohash}/${r.disease_category}`)).toEqual([
+        'ezs42/gastrointestinal',
+        'ezs42/respiratory',
+        'u4pru/respiratory',
+      ]);
+    });
+
+    it('defaults as_of to the database clock', async () => {
+      await seed([{ at: new Date(Date.now() - HOUR).toISOString(), cases: 1 }]);
+
+      const [row] = await repo.getAnomalyStats('ezs42');
+
+      expect(Math.abs(Date.parse(row!.as_of) - Date.now())).toBeLessThan(60_000);
+    });
+
+    it('pages past the 1000-row PostgREST limit', async () => {
+      await seed(Array.from({ length: 1005 }, (_, i) => ({ at: before(HOUR), cases: 1, category: `c${i}` })));
+
+      expect(await repo.getAnomalyStats('ezs42', T)).toHaveLength(1005);
+    });
+  });
 });

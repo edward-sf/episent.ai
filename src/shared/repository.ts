@@ -30,12 +30,23 @@ export interface WindowReport {
   age_band: string | null;
 }
 
+export interface AnomalyStatsRow {
+  geohash: string;
+  disease_category: string;
+  current_cases: number;
+  baseline_median: number | null;
+  baseline_mad: number | null;
+  baseline_weeks: number;
+  as_of: string; // Postgres timestamptz text, e.g. "2026-09-23T12:00:00+00:00"
+}
+
 export interface Repository {
   insertCaseReport(report: NewCaseReport): Promise<{ id: string }>;
   getRegion(geohash: string): Promise<RegionRow | null>;
   listDirtyRegions(maxRegions: number): Promise<DirtyRegion[]>;
   getWindowReports(geohash: string, windowStart: Date, windowEnd: Date): Promise<WindowReport[]>;
   markAggregated(geohash: string, checkedAt: string, latestWindowEnd: string | null): Promise<void>;
+  getAnomalyStats(geohash: string | null, asOf?: Date): Promise<AnomalyStatsRow[]>;
 }
 
 // Must not exceed Supabase's API max_rows (default 1000), or pagination stops early.
@@ -110,6 +121,23 @@ export function createSupabaseRepository(url: string, secretKey: string): Reposi
       if (latestWindowEnd !== null) update.latest_window_end = latestWindowEnd;
       const { error } = await db.from('regions_index').update(update).eq('geohash', geohash);
       if (error) throw new Error(`markAggregated failed: ${error.message}`);
+    },
+
+    async getAnomalyStats(geohash, asOf) {
+      const params: { p_geohash: string | null; p_as_of?: string } = { p_geohash: geohash };
+      if (asOf) params.p_as_of = asOf.toISOString();
+      const rows: AnomalyStatsRow[] = [];
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await db
+          .rpc('anomaly_stats', params)
+          .order('geohash')
+          .order('disease_category')
+          .range(from, from + PAGE_SIZE - 1);
+        if (error) throw new Error(`getAnomalyStats failed: ${error.message}`);
+        const page = (data ?? []) as AnomalyStatsRow[];
+        rows.push(...page);
+        if (page.length < PAGE_SIZE) return rows;
+      }
     },
   };
 }
