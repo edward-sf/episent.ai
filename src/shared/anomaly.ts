@@ -1,4 +1,7 @@
+import type { AnomalyStatus, CategoryAnomaly, RegionAnomaly } from './api-types';
 import type { AnomalyStatsRow } from './repository';
+
+export type { AnomalyStatus, CategoryAnomaly, RegionAnomaly } from './api-types';
 
 export const BASELINE_MIN_WEEKS = 4;
 export const ELEVATED_SCORE = 2;
@@ -7,31 +10,12 @@ export const ANOMALOUS_MIN_CASES = 5;
 // Scales MAD to a standard-deviation estimate for normally distributed counts.
 const MAD_TO_SD = 1.4826;
 
-export type AnomalyStatus = 'anomalous' | 'elevated' | 'normal' | 'insufficient_data';
-
 const SEVERITY: Record<AnomalyStatus, number> = {
   anomalous: 3,
   elevated: 2,
   normal: 1,
   insufficient_data: 0,
 };
-
-export interface CategoryAnomaly {
-  category: string;
-  status: AnomalyStatus;
-  score: number | null;
-  current_cases: number;
-  baseline_median: number | null;
-  baseline_mad: number | null;
-  baseline_weeks: number;
-}
-
-export interface RegionAnomaly {
-  geohash: string;
-  status: AnomalyStatus;
-  max_score: number | null;
-  categories: CategoryAnomaly[];
-}
 
 // Robust z-score. sqrt(median) is a Poisson-like noise floor; 1 keeps sparse categories
 // (median 0, MAD 0) from producing huge scores.

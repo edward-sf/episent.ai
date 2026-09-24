@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import type { SimilarResponse } from '../shared/api-types';
 import { vectorId, type PatternMetadata } from '../shared/vectors';
 import type { AppEnv } from './env';
 import { parseRegionQuery } from './region-query';
@@ -39,7 +40,7 @@ export async function similarHandler(c: Context<AppEnv>) {
     filter: { geohash: { $ne: geohash } },
   });
 
-  return c.json({
+  const body: SimilarResponse = {
     query: { geohash, window_end: region.latest_window_end },
     matches: result.matches.map((match) => {
       const metadata = match.metadata as unknown as PatternMetadata | undefined;
@@ -52,5 +53,6 @@ export async function similarHandler(c: Context<AppEnv>) {
         top_category: metadata?.top_category,
       };
     }),
-  });
+  };
+  return c.json(body);
 }

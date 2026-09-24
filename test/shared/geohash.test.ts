@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodeGeohash, isValidRegionGeohash, REGION_PRECISION } from '../../src/shared/geohash';
+import { decodeGeohash, encodeGeohash, isValidRegionGeohash, REGION_PRECISION } from '../../src/shared/geohash';
 
 describe('encodeGeohash', () => {
   it('encodes the reference point from the geohash spec', () => {
@@ -29,5 +29,22 @@ describe('isValidRegionGeohash', () => {
 
   it.each(['ezs4', 'ezs421', 'ezsa2', 'EZS42', ''])('rejects %j', (value) => {
     expect(isValidRegionGeohash(value)).toBe(false);
+  });
+});
+
+describe('decodeGeohash', () => {
+  it('returns the centre of the reference cell', () => {
+    const { lat, lon } = decodeGeohash('ezs42');
+    expect(lat).toBeCloseTo(42.605, 1);
+    expect(lon).toBeCloseTo(-5.603, 1);
+  });
+
+  it.each(['ezs42', 'u4pru', 's0000', '00000', 'zzzzz', 'gcpvj'])('round-trips %s through encodeGeohash', (hash) => {
+    const { lat, lon } = decodeGeohash(hash);
+    expect(encodeGeohash(lat, lon)).toBe(hash);
+  });
+
+  it('rejects invalid characters', () => {
+    expect(() => decodeGeohash('ezsa2')).toThrow('invalid geohash character: a');
   });
 });

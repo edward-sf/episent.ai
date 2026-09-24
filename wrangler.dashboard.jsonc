@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "episent-dashboard",
+  "main": "src/dashboard/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+  // Secret (wrangler secret put): API_TOKEN, the same value as episent-api's.
+  // Built by `npm run build:dashboard`. Only /api/* runs Worker code; everything else is a static asset.
+  "assets": { "directory": "./dist/dashboard", "run_worker_first": ["/api/*"] },
+  // Deploy episent-api first: the binding targets an existing Worker.
+  "services": [{ "binding": "API", "service": "episent-api" }]
+}
